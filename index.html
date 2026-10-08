@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<!-- Aucune requête réseau possible : seuls le script et les styles inline de ce fichier sont autorisés. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Anonymiseur local</title>
+<style>
+:root{
+  --bg:#E9EDF1; --surface:#FFFFFF; --ink:#141B25; --muted:#475266; --line:#B9C2CE;
+  --accent:#1C47C9; --accent-ink:#FFFFFF; --focus:#1C47C9;
+  --ok-bg:#E3F4E0; --ok-line:#2F7A1F; --warn-bg:#FFF4D6; --warn-line:#8A5F00;
+  --c-nom:#FFE08A; --c-nom-b:#8A5F00;
+  --c-org:#BFE0FF; --c-org-b:#1F5FA8;
+  --c-lieu:#CDEFC0; --c-lieu-b:#2B6E1C;
+  --c-contact:#F4CBEF; --c-contact-b:#8E2A82;
+  --c-fin:#FFCDBD; --c-fin-b:#A63A12;
+  --c-id:#DCD2FF; --c-id-b:#5432B8;
+  --c-date:#DDE1E7; --c-date-b:#475266;
+  --font:"Atkinson Hyperlegible","Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"Cascadia Code","SF Mono",Consolas,"Liberation Mono",monospace;
+  color-scheme:light dark;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0E131A; --surface:#17202B; --ink:#E8EDF3; --muted:#A9B4C4; --line:#3A4656;
+    --accent:#8FB0FF; --accent-ink:#0E131A; --focus:#8FB0FF;
+    --ok-bg:#16301A; --ok-line:#7FD46A; --warn-bg:#3A2E0A; --warn-line:#E8B94A;
+    --c-nom:#5A4500; --c-nom-b:#F2C94C;
+    --c-org:#123B66; --c-org-b:#8CC4FF;
+    --c-lieu:#1D4A17; --c-lieu-b:#93E07C;
+    --c-contact:#5A1D53; --c-contact-b:#F2A6E8;
+    --c-fin:#5E2410; --c-fin-b:#FFB094;
+    --c-id:#33246E; --c-id-b:#C4B3FF;
+    --c-date:#323C4A; --c-date-b:#C3CCD8;
+  }
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:1rem/1.55 var(--font)}
+.wrap{max-width:1320px;margin:0 auto;padding:1.75rem clamp(1rem,3vw,2.5rem) 4rem}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.sr-only{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
+.skip{position:absolute;left:1rem;top:-3rem;background:var(--accent);color:var(--accent-ink);padding:.5rem .9rem;border-radius:4px;z-index:10}
+.skip:focus{top:1rem}
+
+header{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:1rem 2rem;margin-bottom:1.75rem}
+h1{font-size:clamp(1.9rem,1.4rem + 2vw,2.8rem);line-height:1.05;letter-spacing:-.02em;margin:0 0 .4rem;font-weight:800}
+.lede{margin:0;color:var(--muted);max-width:60ch}
+.net{margin:0;padding:.5rem .8rem;border:1px solid var(--line);border-left-width:4px;border-radius:4px;font-size:.92rem;max-width:44ch;background:var(--surface)}
+.net.is-ok{border-color:var(--ok-line);background:var(--ok-bg)}
+.net.is-warn{border-color:var(--warn-line);background:var(--warn-bg)}
+
+main{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);grid-template-areas:"source revue" "detect revue" "export export";gap:1.25rem;align-items:start}
+#s-source{grid-area:source} #s-detect{grid-area:detect} #revue{grid-area:revue} #s-export{grid-area:export}
+@media (max-width:960px){main{grid-template-columns:1fr;grid-template-areas:"source" "detect" "revue" "export"}}
+section{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:1.25rem clamp(1rem,2vw,1.6rem) 1.4rem}
+#revue{position:sticky;top:1rem}
+@media (max-width:960px){#revue{position:static}}
+h2{font-size:1.3rem;line-height:1.2;margin:0 0 1rem;display:flex;align-items:baseline;gap:.6rem}
+h2 .step{font-size:2.1rem;line-height:1;font-weight:800;color:var(--accent);font-variant-numeric:tabular-nums}
+h2:focus{outline:none}
+h2:focus-visible{outline:3px solid var(--focus)}
+
+label,legend{font-weight:700;display:block;margin-bottom:.3rem}
+fieldset{border:0;padding:0;margin:0 0 1.1rem}
+.field{margin-bottom:1.1rem}
+.hint{color:var(--muted);font-size:.9rem;margin:.3rem 0 0;max-width:70ch}
+textarea,input[type=text],select{width:100%;font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--muted);border-radius:4px;padding:.5rem .65rem}
+textarea{resize:vertical;min-height:6rem}
+textarea.code,#preview.code{font-family:var(--mono);font-size:.88rem;line-height:1.6}
+.choices{display:flex;flex-wrap:wrap;gap:.35rem 1.2rem}
+.choices.stack{flex-direction:column}
+.choice{display:flex;gap:.5rem;align-items:flex-start;font-weight:400;margin:0}
+.choice input{margin-top:.3rem;width:1.05rem;height:1.05rem;accent-color:var(--accent);flex:none}
+.choice small{color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:end}
+.row>.grow{flex:1 1 14rem}
+.row>.fixed{flex:0 1 11rem}
+
+button{font:inherit;font-weight:700;border-radius:4px;padding:.55rem 1rem;cursor:pointer;border:2px solid var(--accent);background:transparent;color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.5;cursor:not-allowed}
+button.link{border:0;padding:.2rem 0;text-decoration:underline;text-underline-offset:.2em;font-weight:600}
+.actions{display:flex;flex-wrap:wrap;gap:.6rem;margin-top:.9rem}
+
+#status{margin:0 0 .8rem;font-weight:600}
+#status:empty{display:none}
+#preview{border:1px solid var(--line);border-radius:4px;padding:.8rem 1rem;max-height:46vh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);line-height:1.9}
+#preview .empty{color:var(--muted);margin:0;font-family:var(--font);white-space:normal}
+mark.ent{color:var(--ink);background:var(--m);border-bottom:2px solid var(--mb);padding:.05em .15em;border-radius:2px;-webkit-box-decoration-break:clone;box-decoration-break:clone;cursor:pointer}
+mark.ent .badge{font:700 .66rem/1 var(--font);margin-left:.3em;padding:.12em .3em;border-radius:2px;background:var(--mb);color:var(--surface);vertical-align:.18em;-webkit-user-select:none;user-select:none;white-space:nowrap;letter-spacing:.02em}
+mark.ent.off{background:transparent;border-bottom-style:dashed}
+mark.ent.off .badge{background:transparent;color:var(--muted);border:1px solid var(--line)}
+mark.ent.flash{outline:3px solid var(--focus)}
+.k-nom{--m:var(--c-nom);--mb:var(--c-nom-b)}
+.k-org{--m:var(--c-org);--mb:var(--c-org-b)}
+.k-lieu{--m:var(--c-lieu);--mb:var(--c-lieu-b)}
+.k-contact{--m:var(--c-contact);--mb:var(--c-contact-b)}
+.k-fin{--m:var(--c-fin);--mb:var(--c-fin-b)}
+.k-id{--m:var(--c-id);--mb:var(--c-id-b)}
+.k-date{--m:var(--c-date);--mb:var(--c-date-b)}
+
+.manual{margin:1rem 0;padding:.9rem 1rem;border:1px dashed var(--line);border-radius:4px}
+.manual p{margin:.4rem 0 0}
+#manual-msg:empty{display:none}
+
+.table-wrap{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:4px;margin-top:1rem}
+table{border-collapse:collapse;width:100%;font-size:.93rem}
+caption{text-align:left;font-weight:700;padding:.6rem .8rem;caption-side:top}
+th,td{text-align:left;padding:.4rem .6rem;border-top:1px solid var(--line);vertical-align:middle}
+thead th{position:sticky;top:0;background:var(--surface);border-top:0;border-bottom:2px solid var(--line);z-index:1;font-size:.85rem}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+td.val{overflow-wrap:anywhere;min-width:10rem}
+td.chk{width:1%}
+td.chk input{width:1.15rem;height:1.15rem;accent-color:var(--accent)}
+td input.rep{padding:.3rem .5rem;font-size:.9rem;min-width:9rem}
+td input.rep:disabled{opacity:.55}
+tr.is-off td.val{text-decoration:line-through;color:var(--muted)}
+.swatch{display:inline-block;width:.8rem;height:.8rem;border-radius:2px;background:var(--m);border:2px solid var(--mb);margin-right:.45rem;vertical-align:-.08em}
+.cat{font-weight:700;font-size:.8rem;white-space:nowrap}
+#summary{color:var(--muted);font-size:.9rem;margin:.6rem 0 0}
+
+.warn{margin:1rem 0 0;padding:.6rem .8rem;border-left:4px solid var(--warn-line);background:var(--warn-bg);border-radius:0 4px 4px 0;font-size:.92rem;max-width:80ch}
+#export-msg{margin:.6rem 0 0;font-weight:600}
+#export-msg:empty{display:none}
+details{margin-top:1.5rem;max-width:80ch}
+summary{cursor:pointer;font-weight:700}
+details ul{padding-left:1.2rem;margin:.6rem 0 0}
+details li{margin-bottom:.35rem}
+</style>
+</head>
+<body>
+<a class="skip" href="#h-review">Aller à la revue</a>
+<div class="wrap">
+<header>
+  <div>
+    <h1>Anonymiseur local</h1>
+    <p class="lede">Repérez les données personnelles d'un texte ou d'un extrait HTML, vérifiez-les une à une, puis exportez une version anonymisée. Tout se passe dans ce navigateur.</p>
+  </div>
+  <p id="net" class="net">Vérification du blocage réseau en cours.</p>
+</header>
+
+<main>
+  <section id="s-source" aria-labelledby="h-source">
+    <h2 id="h-source"><span class="step" aria-hidden="true">1</span><span><span class="sr-only">Étape 1 : </span>Source</span></h2>
+    <fieldset>
+      <legend>Type de contenu</legend>
+      <div class="choices">
+        <label class="choice"><input type="radio" name="mode" value="text" checked> Texte</label>
+        <label class="choice"><input type="radio" name="mode" value="html"> Code HTML</label>
+      </div>
+    </fieldset>
+    <div class="field">
+      <label for="src">Contenu à anonymiser</label>
+      <textarea id="src" rows="12" spellcheck="false" aria-describedby="src-hint"></textarea>
+      <p class="hint" id="src-hint">Collez votre contenu ici. <button type="button" class="link" id="sample">Charger un exemple</button></p>
+    </div>
+    <div class="field" id="attrs-field" hidden>
+      <label for="attrs">Attributs HTML à traiter</label>
+      <input type="text" id="attrs" spellcheck="false" aria-describedby="attrs-hint" value="alt title value placeholder aria-label aria-description aria-valuetext aria-roledescription href src srcset content label summary">
+      <p class="hint" id="attrs-hint">Séparés par des espaces. Seuls le texte, les commentaires et ces attributs sont modifiés : balises, <code>id</code>, classes, <code>role</code> et relations ARIA (<code>aria-labelledby</code>, <code>aria-describedby</code>…) restent intacts. Le contenu des balises <code>script</code> et <code>style</code> est ignoré.</p>
+    </div>
+  </section>
+
+  <section id="s-detect" aria-labelledby="h-detect">
+    <h2 id="h-detect"><span class="step" aria-hidden="true">2</span><span><span class="sr-only">Étape 2 : </span>Détection</span></h2>
+    <fieldset>
+      <legend>Détecteurs automatiques</legend>
+      <div class="choices stack" id="detectors"></div>
+    </fieldset>
+    <div class="field">
+      <label for="dict">Dictionnaire de termes à anonymiser</label>
+      <textarea id="dict" rows="5" spellcheck="false" aria-describedby="dict-hint" placeholder="Dupont&#10;Acme Corp ; ORGANISATION&#10;Projet Hermès ; PROJET"></textarea>
+      <p class="hint" id="dict-hint">Un terme par ligne, catégorie facultative après un point-virgule (NOM par défaut). Insensible à la casse ; « Claire Fontaine » repère aussi « claire-fontaine » ou « claire.fontaine ».</p>
+    </div>
+    <div class="field">
+      <label for="exclude">Termes à ne jamais anonymiser</label>
+      <textarea id="exclude" rows="3" spellcheck="false" aria-describedby="exclude-hint" placeholder="Marianne&#10;Service Public"></textarea>
+      <p class="hint" id="exclude-hint">Un terme par ligne. Utile pour écarter durablement les faux positifs récurrents.</p>
+    </div>
+    <fieldset>
+      <legend>Remplacement</legend>
+      <div class="choices stack">
+        <label class="choice"><input type="radio" name="strategy" value="label" checked><span>Étiquettes numérotées <small>([NOM_1], [EMAIL_2]…)</small></span></label>
+        <label class="choice"><input type="radio" name="strategy" value="fake"><span>Valeurs fictives <small>(Personne A, personne1@exemple.fr…, garde le code HTML plausible)</small></span></label>
+        <label class="choice"><input type="radio" name="strategy" value="mask"><span>Masquage <small>(█████)</small></span></label>
+      </div>
+    </fieldset>
+    <button type="button" class="primary" id="run">Détecter les données</button>
+  </section>
+
+  <section id="revue" aria-labelledby="h-review">
+    <h2 id="h-review" tabindex="-1"><span class="step" aria-hidden="true">3</span><span><span class="sr-only">Étape 3 : </span>Revue</span></h2>
+    <p id="status" role="status"></p>
+    <div id="preview" role="region" aria-label="Aperçu avec les données repérées" tabindex="0"><p class="empty">Lancez la détection pour voir ici les données repérées.</p></div>
+    <p class="hint">Cliquez sur une donnée surlignée pour la retrouver dans la liste. Les données en pointillés sont ignorées et resteront visibles dans l'export.</p>
+
+    <div class="manual">
+      <div class="row">
+        <div class="grow">
+          <label for="manual">Ajouter une donnée oubliée</label>
+          <input type="text" id="manual" spellcheck="false">
+        </div>
+        <div class="fixed">
+          <label for="manual-cat">Catégorie</label>
+          <select id="manual-cat"></select>
+        </div>
+        <button type="button" id="add" disabled>Ajouter</button>
+      </div>
+      <p><button type="button" class="link" id="use-sel">Reprendre le passage sélectionné dans l'aperçu</button></p>
+      <p id="manual-msg" class="hint" role="status"></p>
+    </div>
+
+    <div class="table-wrap" tabindex="0" role="region" aria-labelledby="t-caption">
+      <table>
+        <caption id="t-caption">Données repérées, par ordre d'apparition</caption>
+        <thead><tr><th scope="col">Anonymiser</th><th scope="col">Valeur repérée</th><th scope="col">Catégorie</th><th scope="col">Occurrences</th><th scope="col">Remplacement</th></tr></thead>
+        <tbody id="tbody"><tr><td colspan="5" class="hint">Aucune donnée pour l'instant.</td></tr></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button type="button" id="all-on" disabled>Tout anonymiser</button>
+      <button type="button" id="all-off" disabled>Tout ignorer</button>
+    </div>
+    <p id="summary"></p>
+  </section>
+
+  <section id="s-export" aria-labelledby="h-export">
+    <h2 id="h-export"><span class="step" aria-hidden="true">4</span><span><span class="sr-only">Étape 4 : </span>Export</span></h2>
+    <label for="out">Résultat anonymisé</label>
+    <textarea id="out" rows="12" readonly spellcheck="false"></textarea>
+    <div class="actions">
+      <button type="button" class="primary" id="copy" disabled>Copier le résultat</button>
+      <button type="button" id="dl-out" disabled>Télécharger le résultat</button>
+      <button type="button" id="dl-map" disabled>Télécharger la table de correspondance</button>
+    </div>
+    <p id="export-msg" role="status"></p>
+    <p class="warn">La table de correspondance contient les données d'origine. Conservez-la à part et protégée, ou ne la générez pas si vous visez une anonymisation irréversible : avec elle, il s'agit d'une pseudonymisation au sens du RGPD.</p>
+    <details>
+      <summary>Limites de cet outil</summary>
+      <ul>
+        <li>Les détecteurs automatiques visent les formats français. Les noms sans civilité ni capitales ne sont repérés que par le dictionnaire ou l'ajout manuel.</li>
+        <li>Les identifiants indirects (fonction unique, anecdote, combinaison lieu et date) ne sont pas détectés : une relecture humaine reste indispensable.</li>
+        <li>En mode HTML, les entités encodées (<code>&amp;eacute;</code>…) ne sont pas décodées avant la recherche : un terme du dictionnaire écrit avec des accents ne les reconnaîtra pas.</li>
+        <li>Pour travailler hors ligne ou figer la version utilisée, enregistrez cette page sur votre ordinateur (Ctrl+S ou Cmd+S) et ouvrez le fichier obtenu : elle fonctionne à l'identique.</li>
+        <li>Pour vérifier l'absence de fuite, ouvrez l'onglet Réseau des outils de développement : aucune requête ne doit apparaître.</li>
+      </ul>
+    </details>
+  </section>
+</main>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+
+/* ---------- Outils ---------- */
+const B = '(?<![\\p{L}\\p{N}_])', E = '(?![\\p{L}\\p{N}_])';
+const UP = '\\p{Lu}', W = "[\\p{L}'’-]";
+const R = (src, flags = 'gu') => new RegExp(src, flags);
+const esc = s => s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\\/]/g, '\\$&');
+const norm = v => v.toLowerCase().replace(/’/g, "'").replace(/[\s._-]+/g, ' ').trim();
+const digits = v => v.replace(/\D/g, '');
+const pl = (n, s, p) => `${n} ${n > 1 ? p : s}`;
+
+function luhn(d) {
+  let sum = 0, alt = false;
+  for (let i = d.length - 1; i >= 0; i--) {
+    let n = +d[i];
+    if (alt) { n *= 2; if (n > 9) n -= 9; }
+    sum += n; alt = !alt;
+  }
+  return sum % 10 === 0;
+}
+function ibanOk(v) {
+  const s = v.replace(/\s/g, '').toUpperCase();
+  if (s.length < 15 || s.length > 34) return false;
+  let m = 0;
+  for (const ch of s.slice(4) + s.slice(0, 4)) {
+    const c = /[A-Z]/.test(ch) ? String(ch.charCodeAt(0) - 55) : ch;
+    for (const x of c) m = (m * 10 + +x) % 97;
+  }
+  return m === 1;
+}
+function nirOk(v) {
+  const s = v.replace(/[\s.]/g, '').toUpperCase();
+  if (s.length === 13) return true;
+  if (s.length !== 15) return false;
+  const body = s.slice(0, 13).replace('2A', '19').replace('2B', '18');
+  return 97n - (BigInt(body) % 97n) === BigInt(s.slice(13));
+}
+const STOP_UP = new Set('RGAA WCAG HTML CSS ARIA PDF URL URI API SVG DOM UX UI RGPD CNIL NVDA JAWS VO IOS AA AAA OK FAQ PNG JPG JPEG GIF XML JSON HTTP HTTPS SEO CMS PHP SQL TV EUR USD TTC HT SA SAS SARL SNC EPA ETP DSI DRH RH CEO CTO PDG RAS NB PS'.split(' '));
+const STOP_FIRST = new Set('Le La Les Un Une Des Du De Voir Critère Critères Page Pages Norme Selon Avec Pour Sur Dans Format Fichier Code Version Règle Test Tests Thème Niveau Mode Balise Attribut Lien Liens Image Images Bouton Formulaire Tableau Titre Rapport Audit Référentiel Annexe Article Chapitre Section Note Exemple Méthode Projet Site Application Norme Guide Contact Service Direction Équipe Total Montant'.split(' '));
+function pnomOk(v) {
+  const parts = v.split(/\s+/);
+  if (STOP_FIRST.has(parts[0])) return false;
+  return !parts.slice(1).some(p => p.split('-').some(t => STOP_UP.has(t)));
+}
+
+/* ---------- Détecteurs ---------- */
+const MONTHS = 'janvier|février|fevrier|mars|avril|mai|juin|juillet|août|aout|septembre|octobre|novembre|décembre|decembre';
+const DETECTORS = [
+  {id:'email', label:'Adresses e-mail', cat:'EMAIL', on:true,
+    res:[R('[\\p{L}\\p{N}._%+-]+@[\\p{L}\\p{N}-]+(?:\\.[\\p{L}\\p{N}-]+)*\\.\\p{L}{2,}')]},
+  {id:'url', label:'Adresses web (URL)', cat:'URL', on:true, trim:true,
+    res:[R('(?:https?:\\/\\/|www\\.)[^\\s<>"\'`]+')]},
+  {id:'tel', label:'Numéros de téléphone', cat:'TEL', on:true,
+    res:[R('(?<![\\d+])(?:(?:\\+|00)33[\\s.-]?(?:\\(0\\)[\\s.-]?)?|0)[1-9](?:[\\s.-]?\\d{2}){4}(?!\\d)', 'g')]},
+  {id:'iban', label:'IBAN', hint:'clé vérifiée', cat:'IBAN', on:true, check:ibanOk,
+    res:[R('(?<![A-Z0-9])[A-Z]{2}\\d{2}(?:\\s?[A-Z0-9]{4}){2,7}(?:\\s?[A-Z0-9]{1,3})?(?![A-Z0-9])', 'g')]},
+  {id:'cb', label:'Cartes bancaires', hint:'contrôle de Luhn', cat:'CB', on:true,
+    check:v => { const d = digits(v); return d.length === 16 && luhn(d); },
+    res:[R('(?<!\\d)(?:\\d{4}[ -]?){3}\\d{4}(?!\\d)', 'g')]},
+  {id:'nir', label:'Numéros de sécurité sociale', cat:'NIR', on:true, check:nirOk,
+    res:[R('(?<![\\dA-Z])[12][\\s.]?\\d{2}[\\s.]?(?:0[1-9]|1[0-2]|[2-9]\\d)[\\s.]?(?:\\d{2}|2[AB])[\\s.]?\\d{3}[\\s.]?\\d{3}(?:[\\s.]?\\d{2})?(?![\\dA-Z])', 'g')]},
+  {id:'siret', label:'SIREN et SIRET', hint:'contrôle de Luhn', cat:'SIRET', on:true,
+    check:v => { const d = digits(v); return (d.length === 9 || d.length === 14) && luhn(d); },
+    res:[R('(?<!\\d)\\d{3}\\s?\\d{3}\\s?\\d{3}(?:\\s?\\d{5})?(?!\\d)', 'g')]},
+  {id:'ip', label:'Adresses IP', cat:'IP', on:true,
+    res:[R('(?<![\\d.])(?:(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)(?!\\d|\\.\\d)', 'g')]},
+  {id:'adresse', label:'Adresses postales', hint:'voie et code postal suivi d\'une ville', cat:'ADRESSE', on:true,
+    res:[
+      R(B + "\\d{1,4}(?:\\s?(?:bis|ter))?,?\\s+(?:[Rr]ue|[Aa]venue|[Aa]v\\.|[Bb]oulevard|[Bb]d|[Pp]lace|[Cc]hemin|[Aa]llée|[Ii]mpasse|[Rr]oute|[Qq]uai|[Cc]ours|[Ss]quare|[Pp]assage|[Rr]ésidence)(?:\\s+(?:de la|de l['’]|du|des|de|d['’]|la|le|les|l['’]|aux|au))?\\s*" + UP + W + "*(?:\\s+(?:de |du |des |d['’]|la |le |l['’])?" + UP + W + "*){0,4}" + E),
+      R("(?<!\\d)\\d{5}\\s+" + UP + W + "+(?:-" + UP + W + "+|\\s(?:sur|en|lès|les|le|la)\\s" + UP + W + "+){0,3}(?:\\s+(?:CEDEX|Cedex)(?:\\s?\\d{1,2})?)?" + E)
+    ]},
+  {id:'civ', label:'Noms précédés d\'une civilité', hint:'M., Mme, Dr…', cat:'NOM', on:true,
+    res:[R('(?<=' + B + '(?:M\\.|MM\\.|Mme\\.?|Mmes|Mlle\\.?|Monsieur|Madame|Mademoiselle|Dr\\.?|Docteur|Me|Maître|Pr\\.?|Professeur)\\s+)' + UP + W + '*(?:\\s+' + UP + W + '*){0,2}' + E)]},
+  {id:'pnom', label:'Prénom suivi d\'un NOM en capitales', hint:'heuristique, à vérifier', cat:'NOM', on:true, check:pnomOk,
+    res:[R(B + UP + "[\\p{Ll}'’]+(?:-" + UP + "\\p{Ll}+)?\\s+\\p{Lu}{2,}(?:[-\\s]\\p{Lu}{2,})?" + E)]},
+  {id:'date', label:'Dates', cat:'DATE', on:false,
+    res:[
+      R('(?<!\\d)(?:0?[1-9]|[12]\\d|3[01])[\\/.-](?:0?[1-9]|1[0-2])[\\/.-](?:\\d{4}|\\d{2})(?!\\d)', 'g'),
+      R(B + '(?:1er|[12]\\d|3[01]|0?[1-9])\\s+(?:' + MONTHS + ')\\s+\\d{4}' + E, 'giu')
+    ]},
+];
+const CATS = ['NOM','ORGANISATION','LIEU','ADRESSE','PROJET','EMAIL','TEL','URL','IP','IBAN','CB','NIR','SIRET','DATE','AUTRE'];
+const NUMERIC = new Set(['TEL','IBAN','CB','NIR','SIRET']);
+const STRUCTURED = new Set([...NUMERIC, 'EMAIL','URL','IP','DATE']);
+const URL_ATTRS = new Set(['href','src','srcset','action','poster','data']);
+const slug = v => v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9@.:\/_-]+/g, '-').replace(/^-+|-+$/g, '');
+const KIND = {NOM:'nom', ORGANISATION:'org', PROJET:'org', LIEU:'lieu', ADRESSE:'lieu', EMAIL:'contact', TEL:'contact', URL:'contact', IBAN:'fin', CB:'fin', SIRET:'fin', NIR:'id', IP:'id', DATE:'date'};
+const kindClass = cat => 'k-' + (KIND[cat] || 'date');
+
+/* ---------- Zones à analyser ---------- */
+function htmlZones(src, attrSet) {
+  const zones = [];
+  const tagRe = /<!--[\s\S]*?-->|<\/?[a-zA-Z][^>]*>|<![^>]*>/g;
+  const attrRe = /([^\s"'<>\/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g;
+  let last = 0, rawText = null, m;
+  while ((m = tagRe.exec(src))) {
+    const i = m.index, t = m[0];
+    if (i > last && !rawText) zones.push({start:last, end:i});
+    if (t.startsWith('<!--')) {
+      if (!rawText) zones.push({start:i + 4, end:i + t.length - 3});
+    } else if (!t.startsWith('<!')) {
+      const head = /^<\/?([a-zA-Z][\w:-]*)/.exec(t);
+      const name = head[1].toLowerCase();
+      if (t[1] === '/') {
+        if (rawText === name) rawText = null;
+      } else if (!rawText) {
+        attrRe.lastIndex = head[0].length;
+        let a;
+        while ((a = attrRe.exec(t))) {
+          const val = a[2] ?? a[3] ?? a[4];
+          if (val === undefined || !val.length || !attrSet.has(a[1].toLowerCase())) continue;
+          const quoted = a[4] === undefined;
+          const vOff = a.index + a[0].length - (quoted ? 1 : 0) - val.length;
+          zones.push({start:i + vOff, end:i + vOff + val.length, attr:a[1].toLowerCase()});
+        }
+        if ((name === 'script' || name === 'style') && !/\/\s*>$/.test(t)) rawText = name;
+      }
+    }
+    last = i + t.length;
+  }
+  if (last < src.length && !rawText) zones.push({start:last, end:src.length});
+  return zones;
+}
+
+/* ---------- Dictionnaire ---------- */
+function buildDict(text) {
+  const map = new Map(), terms = [];
+  for (const line of text.split('\n')) {
+    const idx = line.lastIndexOf(';');
+    const term = (idx >= 0 ? line.slice(0, idx) : line).trim();
+    const cat = (idx >= 0 ? line.slice(idx + 1) : '').trim().toUpperCase().replace(/\s+/g, '_');
+    if (term.length < 2) continue;
+    const k = norm(term);
+    if (!k || map.has(k)) continue;
+    map.set(k, cat || 'NOM');
+    terms.push(term);
+  }
+  if (!terms.length) return {re:null, map};
+  terms.sort((a, b) => b.length - a.length);
+  const alts = terms.map(t => t.split(/[\s._-]+/).filter(Boolean).map(w => reEsc(w).replace(/['’]/g, "['’]")).join('[\\s._-]+'));
+  return {re:R(B + '(?:' + alts.join('|') + ')' + E, 'giu'), map};
+}
+
+/* ---------- Détection ---------- */
+function collect(src, zones, detectors, dict, excl) {
+  let spans = [];
+  for (const z of zones) {
+    const seg = src.slice(z.start, z.end);
+    if (!seg.trim()) continue;
+    for (const d of detectors) {
+      for (const re of d.res) {
+        for (const m of seg.matchAll(re)) {
+          let v = m[0];
+          if (d.trim) v = v.replace(/[.,;:!?)\]}»]+$/, '');
+          if (!v || (d.check && !d.check(v))) continue;
+          spans.push({start:z.start + m.index, end:z.start + m.index + v.length, value:v, cat:d.cat, attr:z.attr});
+        }
+      }
+    }
+    if (dict.re) {
+      for (const m of seg.matchAll(dict.re)) {
+        spans.push({start:z.start + m.index, end:z.start + m.index + m[0].length, value:m[0], cat:dict.map.get(norm(m[0])) || 'NOM', attr:z.attr});
+      }
+    }
+  }
+  spans = spans.filter(s => !excl.has(norm(s.value)));
+  // Chevauchements : la correspondance la plus longue l'emporte (un e-mail entier plutôt que le nom qu'il contient).
+  spans.sort((a, b) => (b.end - b.start) - (a.end - a.start) || a.start - b.start);
+  const kept = [];
+  for (const s of spans) if (!kept.some(o => s.start < o.end && o.start < s.end)) kept.push(s);
+  return kept.sort((a, b) => a.start - b.start);
+}
+function keyOf(s) {
+  let v;
+  if (NUMERIC.has(s.cat)) {
+    v = s.value.replace(/[\s.\-()+]/g, '').toUpperCase();
+    if (s.cat === 'TEL') v = v.replace(/^0033(0)?/, '0').replace(/^33(0)?(?=\d{9}$)/, '0');
+  } else v = norm(s.value);
+  return s.cat + '|' + v;
+}
+
+/* ---------- Remplacements ---------- */
+const letters = n => { let s = ''; while (n > 0) { n--; s = String.fromCharCode(65 + n % 26) + s; n = Math.floor(n / 26); } return s; };
+const pad = (n, w) => String(n).padStart(w, '0').slice(-w);
+const FAKE = {
+  NOM: n => `Personne ${letters(n)}`,
+  ORGANISATION: n => `Organisation ${letters(n)}`,
+  PROJET: n => `Projet ${letters(n)}`,
+  LIEU: n => `Lieu ${letters(n)}`,
+  ADRESSE: n => `Adresse ${letters(n)}`,
+  EMAIL: n => `personne${n}@exemple.fr`,
+  URL: n => `https://exemple.org/page-${n}`,
+  TEL: n => `01 00 00 00 ${pad(n, 2)}`,
+  IP: n => `192.0.2.${(n - 1) % 254 + 1}`,
+  IBAN: n => `FR00 0000 0000 0000 0000 0000 ${pad(n, 3)}`,
+  CB: n => `0000 0000 0000 ${pad(n, 4)}`,
+  SIRET: n => `000 000 ${pad(n, 3)}`,
+};
+function makeRep(strategy, cat, n) {
+  if (strategy === 'mask') return '█████';
+  if (strategy === 'fake' && FAKE[cat]) return FAKE[cat](n);
+  if (strategy === 'fake') return `${cat.charAt(0)}${cat.slice(1).toLowerCase().replace(/_/g, ' ')} ${letters(n)}`;
+  return `[${cat}_${n}]`;
+}
+
+/* ---------- État ---------- */
+const state = {src:'', mode:'text', spans:[], entities:[], reps:[], decisions:new Map(), detected:false};
+const dec = e => {
+  let d = state.decisions.get(e.key);
+  if (!d) { d = {on:true, custom:null}; state.decisions.set(e.key, d); }
+  return d;
+};
+const getMode = () => document.querySelector('input[name=mode]:checked').value;
+const getStrategy = () => document.querySelector('input[name=strategy]:checked').value;
+
+/* ---------- Interface ---------- */
+const els = {
+  src:$('#src'), attrs:$('#attrs'), attrsField:$('#attrs-field'), dict:$('#dict'), exclude:$('#exclude'),
+  detectors:$('#detectors'), run:$('#run'), status:$('#status'), preview:$('#preview'), tbody:$('#tbody'),
+  summary:$('#summary'), out:$('#out'), manual:$('#manual'), manualCat:$('#manual-cat'), add:$('#add'),
+  manualMsg:$('#manual-msg'), exportMsg:$('#export-msg'), hReview:$('#h-review')
+};
+
+els.detectors.innerHTML = DETECTORS.map(d =>
+  `<label class="choice"><input type="checkbox" id="det-${d.id}" ${d.on ? 'checked' : ''}><span>${esc(d.label)}${d.hint ? ` <small>(${esc(d.hint)})</small>` : ''}</span></label>`
+).join('');
+els.manualCat.innerHTML = CATS.map(c => `<option value="${c}">${c}</option>`).join('');
+
+function run({focus = true} = {}) {
+  state.src = els.src.value;
+  state.mode = getMode();
+  if (!state.src.trim()) {
+    els.status.textContent = 'Le contenu est vide : collez un texte ou un extrait HTML à l\'étape 1.';
+    if (focus) els.src.focus();
+    return;
+  }
+  const attrSet = new Set(els.attrs.value.toLowerCase().split(/[\s,]+/).filter(Boolean));
+  const zones = state.mode === 'html' ? htmlZones(state.src, attrSet) : [{start:0, end:state.src.length}];
+  const detectors = DETECTORS.filter(d => $('#det-' + d.id).checked);
+  const excl = new Set(els.exclude.value.split('\n').map(norm).filter(Boolean));
+  let spans = collect(state.src, zones, detectors, buildDict(els.dict.value), excl);
+  // Propagation : un nom repéré une fois (par exemple grâce à une civilité) est recherché partout ailleurs.
+  const found = spans.filter(s => !STRUCTURED.has(s.cat)).map(s => `${s.value} ; ${s.cat}`);
+  if (found.length) spans = collect(state.src, zones, detectors, buildDict(els.dict.value + '\n' + found.join('\n')), excl);
+
+  const byKey = new Map(), entities = [];
+  for (const s of spans) {
+    const k = keyOf(s);
+    let i = byKey.get(k);
+    if (i === undefined) { i = entities.length; byKey.set(k, i); entities.push({key:k, cat:s.cat, value:s.value, count:0}); }
+    else if (/\s/.test(s.value) && !/\s/.test(entities[i].value)) entities[i].value = s.value;
+    entities[i].count++;
+    s.ent = i;
+  }
+  Object.assign(state, {spans, entities, detected:true});
+  renderTable();
+  refresh();
+  ['#copy','#dl-out','#dl-map','#all-on','#all-off','#add'].forEach(s => $(s).disabled = false);
+  els.status.textContent = entities.length
+    ? `${pl(entities.length, 'donnée distincte repérée', 'données distinctes repérées')}, ${pl(spans.length, 'occurrence', 'occurrences')}. Vérifiez la liste avant d'exporter.`
+    : 'Aucune donnée repérée. Ajoutez des termes au dictionnaire ou activez d\'autres détecteurs.';
+  if (focus) els.hReview.focus();
+}
+
+function computeReps() {
+  const strategy = getStrategy(), counters = {};
+  state.reps = state.entities.map(e => {
+    const d = dec(e);
+    if (!d.on) return null;
+    const n = counters[e.cat] = (counters[e.cat] || 0) + 1;
+    return d.custom ?? makeRep(strategy, e.cat, n);
+  });
+}
+
+function renderPreview() {
+  const {src, spans, entities} = state;
+  let h = '', pos = 0;
+  for (const s of spans) {
+    const e = entities[s.ent], on = dec(e).on;
+    h += esc(src.slice(pos, s.start));
+    h += `<mark class="ent ${kindClass(e.cat)}${on ? '' : ' off'}" data-i="${s.ent}">${esc(src.slice(s.start, s.end))}<span class="badge"><span class="sr-only"> (</span>${esc(e.cat)}${on ? '' : ' ignoré'}<span class="sr-only">)</span></span></mark>`;
+    pos = s.end;
+  }
+  h += esc(src.slice(pos));
+  els.preview.classList.toggle('code', state.mode === 'html');
+  els.preview.innerHTML = h;
+}
+
+function renderTable() {
+  if (!state.entities.length) {
+    els.tbody.innerHTML = '<tr><td colspan="5" class="hint">Aucune donnée repérée.</td></tr>';
+    return;
+  }
+  els.tbody.innerHTML = state.entities.map((e, i) => {
+    const on = dec(e).on;
+    return `<tr data-i="${i}"${on ? '' : ' class="is-off"'}>
+      <td class="chk"><input type="checkbox" id="chk-${i}"${on ? ' checked' : ''}><label class="sr-only" for="chk-${i}">Anonymiser ${esc(e.value)}</label></td>
+      <td class="val"><span class="swatch ${kindClass(e.cat)}" aria-hidden="true"></span>${esc(e.value)}</td>
+      <td><span class="cat">${esc(e.cat)}</span></td>
+      <td class="num">${e.count}</td>
+      <td><input type="text" class="rep" id="rep-${i}" spellcheck="false" aria-label="Remplacement de ${esc(e.value)}"></td>
+    </tr>`;
+  }).join('');
+}
+
+function syncReps() {
+  state.entities.forEach((e, i) => {
+    const input = $('#rep-' + i), d = dec(e);
+    if (!input) return;
+    input.disabled = !d.on;
+    input.placeholder = d.on ? '' : 'non remplacé';
+    if (document.activeElement !== input) input.value = d.on ? state.reps[i] : '';
+  });
+}
+
+function renderOutput() {
+  const {src, spans, reps, mode} = state;
+  let out = '', pos = 0;
+  for (const s of spans) {
+    out += src.slice(pos, s.start);
+    const r = reps[s.ent];
+    out += r == null ? src.slice(s.start, s.end) : (mode === 'html' ? esc(URL_ATTRS.has(s.attr) ? slug(r) : r) : r);
+    pos = s.end;
+  }
+  els.out.value = out + src.slice(pos);
+}
+
+function renderSummary() {
+  const total = state.entities.length;
+  const on = state.entities.filter(e => dec(e).on).length;
+  els.summary.textContent = total ? `${on} sur ${total} seront remplacées dans l'export.` : '';
+}
+
+function refresh({preview = true} = {}) {
+  if (!state.detected) return;
+  computeReps();
+  if (preview) renderPreview();
+  syncReps();
+  renderOutput();
+  renderSummary();
+}
+
+/* ---------- Événements ---------- */
+els.run.addEventListener('click', () => run());
+
+document.querySelectorAll('input[name=mode]').forEach(r => r.addEventListener('change', () => {
+  const html = getMode() === 'html';
+  els.attrsField.hidden = !html;
+  els.src.classList.toggle('code', html);
+  if (state.detected) els.status.textContent = 'Le type de contenu a changé : relancez la détection.';
+}));
+document.querySelectorAll('input[name=strategy]').forEach(r => r.addEventListener('change', () => refresh({preview:false})));
+els.src.addEventListener('input', () => {
+  if (state.detected) els.status.textContent = 'Le contenu a changé : relancez la détection pour mettre la revue à jour.';
+});
+
+els.tbody.addEventListener('change', e => {
+  const t = e.target;
+  if (t.type !== 'checkbox') return;
+  const i = +t.closest('tr').dataset.i;
+  dec(state.entities[i]).on = t.checked;
+  t.closest('tr').classList.toggle('is-off', !t.checked);
+  refresh();
+});
+els.tbody.addEventListener('input', e => {
+  const t = e.target;
+  if (!t.classList.contains('rep')) return;
+  const i = +t.closest('tr').dataset.i;
+  dec(state.entities[i]).custom = t.value.trim() ? t.value : null;
+  refresh({preview:false});
+});
+els.tbody.addEventListener('focusout', e => {
+  if (e.target.classList && e.target.classList.contains('rep')) syncReps();
+});
+
+function setAll(on) {
+  state.entities.forEach(e => dec(e).on = on);
+  renderTable();
+  refresh();
+}
+$('#all-on').addEventListener('click', () => setAll(true));
+$('#all-off').addEventListener('click', () => setAll(false));
+
+els.preview.addEventListener('click', e => {
+  const m = e.target.closest('mark[data-i]');
+  if (!m || String(getSelection()).trim()) return;
+  const c = $('#chk-' + m.dataset.i);
+  if (!c) return;
+  c.scrollIntoView({block:'nearest'});
+  c.focus();
+});
+
+let lastSel = '';
+document.addEventListener('selectionchange', () => {
+  const s = getSelection();
+  if (!s || !s.rangeCount || s.isCollapsed) return;
+  if (!els.preview.contains(s.anchorNode) || !els.preview.contains(s.focusNode)) return;
+  const frag = s.getRangeAt(0).cloneContents();
+  frag.querySelectorAll('.badge').forEach(b => b.remove());
+  const t = frag.textContent.replace(/\s+/g, ' ').trim();
+  if (t) lastSel = t;
+});
+$('#use-sel').addEventListener('click', () => {
+  if (!lastSel) { els.manualMsg.textContent = 'Sélectionnez d\'abord un passage dans l\'aperçu.'; return; }
+  els.manual.value = lastSel;
+  els.manualMsg.textContent = '';
+  els.manual.focus();
+});
+function addManual() {
+  const t = els.manual.value.replace(/\s+/g, ' ').trim();
+  if (t.length < 2) { els.manualMsg.textContent = 'Saisissez au moins 2 caractères.'; els.manual.focus(); return; }
+  const cat = els.manualCat.value;
+  els.dict.value = (els.dict.value.trim() ? els.dict.value.replace(/\s*$/, '') + '\n' : '') + `${t} ; ${cat}`;
+  els.manual.value = '';
+  run({focus:false});
+  const found = state.spans.some(s => norm(s.value) === norm(t));
+  els.manualMsg.textContent = found
+    ? `« ${t} » est ajouté au dictionnaire en ${cat}.`
+    : `« ${t} » est ajouté au dictionnaire, mais n'apparaît pas tel quel dans le contenu (ou figure dans les termes exclus).`;
+  els.manual.focus();
+}
+els.add.addEventListener('click', addManual);
+els.manual.addEventListener('keydown', e => { if (e.key === 'Enter' && !els.add.disabled) { e.preventDefault(); addManual(); } });
+
+async function copyOut() {
+  try {
+    await navigator.clipboard.writeText(els.out.value);
+    els.exportMsg.textContent = 'Résultat copié dans le presse-papiers.';
+  } catch {
+    els.out.select();
+    const ok = document.execCommand && document.execCommand('copy');
+    els.exportMsg.textContent = ok ? 'Résultat copié dans le presse-papiers.' : 'Copie impossible : le texte est sélectionné, copiez-le avec Ctrl+C ou Cmd+C.';
+  }
+}
+function download(name, text, type) {
+  const url = URL.createObjectURL(new Blob([text], {type}));
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+$('#copy').addEventListener('click', copyOut);
+$('#dl-out').addEventListener('click', () => {
+  const html = state.mode === 'html';
+  download(html ? 'contenu-anonymise.html' : 'contenu-anonymise.txt', els.out.value, html ? 'text/html;charset=utf-8' : 'text/plain;charset=utf-8');
+  els.exportMsg.textContent = 'Téléchargement du résultat lancé.';
+});
+$('#dl-map').addEventListener('click', () => {
+  const rows = state.entities.map((e, i) => ({categorie:e.cat, original:e.value, remplacement:state.reps[i], occurrences:e.count})).filter(r => r.remplacement != null);
+  download('table-de-correspondance.json', JSON.stringify(rows, null, 2), 'application/json;charset=utf-8');
+  els.exportMsg.textContent = `Téléchargement de la table lancé (${pl(rows.length, 'ligne', 'lignes')}). Elle contient les données d'origine.`;
+});
+
+/* ---------- Exemples ---------- */
+const SAMPLES = {
+  text: {
+    src: `Compte rendu de réunion du 14 mars 2025
+
+Présents : Mme Claire Fontaine (DSI, Acme Assurances), M. Julien Marchand, Sophie LEROUX.
+
+Julien Marchand rappelle que l'audit RGAA du site https://www.acme-assurances.fr/espace-client doit être livré avant le 30/04/2025. Les remarques sont à envoyer à claire.fontaine@acme-assurances.fr ou par téléphone au 06 12 34 56 78.
+
+Adresse de facturation : Acme Assurances, 12 rue des Lilas, 69003 Lyon.
+SIRET : 732 829 320 00074. IBAN : FR76 3000 6000 0112 3456 7890 189.
+
+Le serveur de recette (10.12.4.27) reste accessible jusqu'à la fin du projet Hermès.`,
+    dict: 'Acme Assurances ; ORGANISATION\nHermès ; PROJET'
+  },
+  html: {
+    src: `<div class="carte-client" data-v-3f2a1b>
+  <img src="/photos/claire-fontaine.jpg" alt="Photo de Claire Fontaine">
+  <h3 id="nom-client">Claire Fontaine</h3>
+  <p>Conseiller : <a href="mailto:j.marchand@acme-assurances.fr">Julien Marchand</a></p>
+  <label for="tel">Téléphone</label>
+  <input id="tel" type="tel" value="+33 6 12 34 56 78" aria-describedby="nom-client">
+  <!-- À vérifier avec Sophie LEROUX avant mise en production -->
+  <button type="button" aria-label="Contacter Claire Fontaine">Contacter</button>
+</div>`,
+    dict: 'Claire Fontaine ; NOM\nJulien Marchand ; NOM'
+  }
+};
+$('#sample').addEventListener('click', () => {
+  const s = SAMPLES[getMode()];
+  els.src.value = s.src;
+  els.dict.value = s.dict;
+  els.src.focus();
+});
+
+/* ---------- Vérification du blocage réseau ---------- */
+(() => {
+  const net = $('#net');
+  let blocked = false;
+  document.addEventListener('securitypolicyviolation', e => {
+    if (String(e.violatedDirective || e.effectiveDirective).startsWith('connect-src')) blocked = true;
+  });
+  // Domaine en .invalid : il ne peut jamais être résolu, rien ne sort même sans la politique de sécurité.
+  const done = () => setTimeout(() => {
+    net.classList.add(blocked ? 'is-ok' : 'is-warn');
+    net.textContent = blocked
+      ? 'Requêtes réseau bloquées par la politique de sécurité de la page : le contenu ne peut pas quitter ce navigateur.'
+      : 'Le blocage réseau n\'a pas pu être confirmé dans ce navigateur. Vérifiez l\'onglet Réseau des outils de développement.';
+  }, 300);
+  try { fetch('https://verification-csp.invalid/').then(done, done); } catch { blocked = true; done(); }
+})();
+})();
+</script>
+</body>
+</html>
