@@ -2,7 +2,7 @@
 
 Outil web d'anonymisation de textes et d'extraits HTML qui fonctionne **entièrement dans le navigateur**. Aucune donnée n'est envoyée sur le réseau.
 
-**[Utiliser l'outil](https://VOTRE-COMPTE.github.io/anonymiseur/)**
+**[Utiliser l'outil](https://becaye.github.io/anonymiseur/)**
 
 ## Fonctionnement
 
